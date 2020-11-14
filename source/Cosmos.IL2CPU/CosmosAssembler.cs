@@ -18,15 +18,13 @@ namespace Cosmos.IL2CPU
             mComPort = comPort;
         }
 
-        private int mComPort = 0;
+        protected int mComPort = 0;
 
-#pragma warning disable CA2211 // Non-constant fields should not be visible
         /// <summary>
         /// Setting this field to false means the .xs files for the debug stub are read from the DebugStub assembly.
         /// This allows the automated kernel tester to use the live ones, instead of the installed ones.
         /// </summary>
         public static bool ReadDebugStubFromDisk = true;
-#pragma warning restore CA2211 // Non-constant fields should not be visible
 
         public virtual void WriteDebugVideo(string aText)
         {
@@ -40,8 +38,8 @@ namespace Cosmos.IL2CPU
             if (xPreBootLogging)
             {
                 new Comment("DebugVideo '" + aText + "'");
-                uint xVideo = 0xB8000;
-                for (uint i = xVideo; i < xVideo + 80 * 2; i = i + 2)
+                UInt32 xVideo = 0xB8000;
+                for (UInt32 i = xVideo; i < xVideo + 80 * 2; i = i + 2)
                 {
                     new LiteralAssemblerCode("mov byte [0x" + i.ToString("X") + "], 0");
                     new LiteralAssemblerCode("mov byte [0x" + (i + 1).ToString("X") + "], 0x02");
@@ -62,7 +60,10 @@ namespace Cosmos.IL2CPU
 
             // Null Segment - Selector 0x00
             // Not used, but required by many emulators.
-            xGDT.AddRange(new byte[8] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+            xGDT.AddRange(new byte[8]
+                          {
+                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+                          });
 
             // Code Segment
             mGdCode = (byte)xGDT.Count;
@@ -74,10 +75,10 @@ namespace Cosmos.IL2CPU
             DataMembers.Add(new DataMember("_NATIVE_GDT_Contents", xGDT.ToArray()));
 
             XS.Comment("Tell CPU about GDT");
-            var xGdtPtr = new ushort[3];
+            var xGdtPtr = new UInt16[3];
 
             // Size of GDT Table - 1
-            xGdtPtr[0] = (ushort)(xGDT.Count - 1);
+            xGdtPtr[0] = (UInt16)(xGDT.Count - 1);
             DataMembers.Add(new DataMember("_NATIVE_GDT_Pointer", xGdtPtr));
             new Mov
             {
@@ -86,16 +87,16 @@ namespace Cosmos.IL2CPU
                 DestinationDisplacement = 2,
                 SourceRef = ElementReference.New("_NATIVE_GDT_Contents")
             };
-            XS.Set(EAX, "_NATIVE_GDT_Pointer");
-            XS.LoadGdt(EAX, isIndirect: true);
+            XS.Set(XSRegisters.EAX, "_NATIVE_GDT_Pointer");
+            XS.LoadGdt(XSRegisters.EAX, isIndirect: true);
 
             XS.Comment("Set data segments");
-            XS.Set(EAX, mGdData);
-            XS.Set(DS, AX);
-            XS.Set(ES, AX);
-            XS.Set(FS, AX);
-            XS.Set(GS, AX);
-            XS.Set(SS, AX);
+            XS.Set(XSRegisters.EAX, mGdData);
+            XS.Set(XSRegisters.DS, XSRegisters.AX);
+            XS.Set(XSRegisters.ES, XSRegisters.AX);
+            XS.Set(XSRegisters.FS, XSRegisters.AX);
+            XS.Set(XSRegisters.GS, XSRegisters.AX);
+            XS.Set(XSRegisters.SS, XSRegisters.AX);
 
             XS.Comment("Force reload of code segment");
             new JumpToSegment
@@ -110,7 +111,7 @@ namespace Cosmos.IL2CPU
         protected void SetIdtDescriptor(int aNo, string aLabel, bool aDisableInts)
         {
             int xOffset = aNo * 8;
-            XS.Set(EAX, aLabel);
+            XS.Set(XSRegisters.EAX, aLabel);
             var xIDT = ElementReference.New("_NATIVE_IDT_Contents");
             new Mov
             {
@@ -126,7 +127,7 @@ namespace Cosmos.IL2CPU
                 DestinationDisplacement = xOffset + 1,
                 SourceReg = RegistersEnum.AH
             };
-            XS.ShiftRight(EAX, 16);
+            XS.ShiftRight(XSRegisters.EAX, 16);
             new Mov
             {
                 DestinationRef = xIDT,
@@ -178,7 +179,7 @@ namespace Cosmos.IL2CPU
             new Comment(this, "BEGIN - Create IDT");
 
             // Create IDT
-            ushort xIdtSize = 8 * 256;
+            UInt16 xIdtSize = 8 * 256;
             DataMembers.Add(new DataMember("_NATIVE_IDT_Contents", new byte[xIdtSize]));
 
             //
@@ -201,7 +202,7 @@ namespace Cosmos.IL2CPU
             //SetIdtDescriptor(1, "DebugStub_INT0"); - Change to GPF
 
             // Set IDT
-            DataMembers.Add(new DataMember("_NATIVE_IDT_Pointer", new ushort[]
+            DataMembers.Add(new DataMember("_NATIVE_IDT_Pointer", new UInt16[]
                                                                   {
                                                                       xIdtSize, 0, 0
                                                                   }));
@@ -213,12 +214,12 @@ namespace Cosmos.IL2CPU
                 SourceRef = ElementReference.New("_NATIVE_IDT_Contents")
             };
 
-            XS.Set(EAX, "_NATIVE_IDT_Pointer");
+            XS.Set(XSRegisters.EAX, "_NATIVE_IDT_Pointer");
 
             if (mComPort > 0)
             {
                 XS.Set(AsmMarker.Labels[AsmMarker.Type.Processor_IntsEnabled], 1, destinationIsIndirect: true, size: RegisterSize.Byte8);
-                XS.LoadIdt(EAX, isIndirect: true);
+                XS.LoadIdt(XSRegisters.EAX, isIndirect: true);
             }
             XS.Label("AfterCreateIDT");
             new Comment(this, "END - Create IDT");
@@ -229,8 +230,11 @@ namespace Cosmos.IL2CPU
             uint xSig = 0x1BADB002;
 
             DataMembers.Add(new DataIfNotDefined("ELF_COMPILATION"));
-            DataMembers.Add(new DataMember("MultibootSignature", new uint[] { xSig }));
-            uint xFlags = 0x10003;
+            DataMembers.Add(new DataMember("MultibootSignature", new uint[]
+                                                                 {
+                                                                     xSig
+                                                                 }));
+            uint xFlags = 0x10007;
             DataMembers.Add(new DataMember("MultibootFlags", xFlags));
             DataMembers.Add(new DataMember("MultibootChecksum", (int)(0 - (xFlags + xSig))));
             DataMembers.Add(new DataMember("MultibootHeaderAddr", ElementReference.New("MultibootSignature")));
@@ -238,25 +242,33 @@ namespace Cosmos.IL2CPU
             DataMembers.Add(new DataMember("MultibootLoadEndAddr", ElementReference.New("_end_code")));
             DataMembers.Add(new DataMember("MultibootBSSEndAddr", ElementReference.New("_end_code")));
             DataMembers.Add(new DataMember("MultibootEntryAddr", ElementReference.New("Kernel_Start")));
+            DataMembers.Add(new DataMember("", 0));
+            DataMembers.Add(new DataMember("", 800, 600, 32));
             DataMembers.Add(new DataEndIfDefined());
 
             DataMembers.Add(new DataIfDefined("ELF_COMPILATION"));
-            xFlags = 0x00003;
-            DataMembers.Add(new DataMember("MultibootSignature", new uint[] { xSig }));
+            xFlags = 0x00007;
+            DataMembers.Add(new DataMember("MultibootSignature", new uint[]
+                                                                 {
+                                                                     xSig
+                                                                 }));
             DataMembers.Add(new DataMember("MultibootFlags", xFlags));
             DataMembers.Add(new DataMember("MultibootChecksum", (int)(0 - (xFlags + xSig))));
+            DataMembers.Add(new DataMember("", 0, 0, 0, 0, 0));
+            DataMembers.Add(new DataMember("", 0));
+            DataMembers.Add(new DataMember("", 800, 600, 32));
             DataMembers.Add(new DataEndIfDefined());
 
-            // graphics info fields
-            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeModeInfoAddr", Int32.MaxValue));
-            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeControlInfoAddr", Int32.MaxValue));
-            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeMode", Int32.MaxValue));
+            //graphics info fields
+            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeModeInfoAddr", 1 << 2));
+            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeControlInfoAddr", 1 << 0));
+            DataMembers.Add(new DataMember("MultibootGraphicsRuntime_VbeMode", 0));
 
             // memory
             DataMembers.Add(new DataMember("MultiBootInfo_Memory_High", 0));
             DataMembers.Add(new DataMember("MultiBootInfo_Memory_Low", 0));
             DataMembers.Add(new DataMember("Before_Kernel_Stack", new byte[0x50000]));
-            DataMembers.Add(new DataMember("Kernel_Stack", Array.Empty<byte>()));
+            DataMembers.Add(new DataMember("Kernel_Stack", new byte[0]));
             DataMembers.Add(new DataMember("MultiBootInfo_Structure", new uint[1]));
 
             // constants
@@ -272,7 +284,7 @@ namespace Cosmos.IL2CPU
 
             // This is our first entry point. Multiboot uses this as Cosmos entry point.
             new Label("Kernel_Start", isGlobal: true);
-            XS.Set(ESP, "Kernel_Stack");
+            XS.Set(XSRegisters.ESP, "Kernel_Stack");
 
             // Displays "Cosmos" in top left. Used to make sure Cosmos is booted in case of hang.
             // ie bootloader debugging. This must be the FIRST code, even before setup so we know
@@ -301,16 +313,16 @@ namespace Cosmos.IL2CPU
                 DestinationIsIndirect = true,
                 SourceReg = RegistersEnum.EBX
             };
-            XS.Add(EBX, 4);
-            XS.Set(EAX, EBX, sourceIsIndirect: true);
+            XS.Add(XSRegisters.EBX, 4);
+            XS.Set(XSRegisters.EAX, XSRegisters.EBX, sourceIsIndirect: true);
             new Mov
             {
                 DestinationRef = ElementReference.New("MultiBootInfo_Memory_Low"),
                 DestinationIsIndirect = true,
                 SourceReg = RegistersEnum.EAX
             };
-            XS.Add(EBX, 4);
-            XS.Set(EAX, EBX, sourceIsIndirect: true);
+            XS.Add(XSRegisters.EBX, 4);
+            XS.Set(XSRegisters.EAX, XSRegisters.EBX, sourceIsIndirect: true);
             new Mov
             {
                 DestinationRef = ElementReference.New("MultiBootInfo_Memory_High"),
@@ -327,16 +339,15 @@ namespace Cosmos.IL2CPU
 
             WriteDebugVideo("Creating IDT.");
             CreateIDT();
-#if LFB_1024_8
+
             new Comment("Set graphics fields");
-            XS.Mov(XSRegisters.EBX, XSharp.Assembler.ElementReference.New("MultiBootInfo_Structure"), sourceIsIndirect: true);
-            XS.Mov(XSRegisters.EAX, XSRegisters.EBX, sourceDisplacement: 72);
-            new Move { DestinationRef = XSharp.Assembler.ElementReference.New("MultibootGraphicsRuntime_VbeControlInfoAddr"), DestinationIsIndirect = true, SourceReg = Registers.EAX };
-            XS.Mov(XSRegisters.EAX, XSRegisters.EBX, sourceDisplacement: 76);
-            new Move { DestinationRef = XSharp.Assembler.ElementReference.New("MultibootGraphicsRuntime_VbeModeInfoAddr"), DestinationIsIndirect = true, SourceReg = Registers.EAX };
-            XS.Mov(XSRegisters.EAX, XSRegisters.EBX, sourceDisplacement: 80);
-            new Move { DestinationRef = XSharp.Assembler.ElementReference.New("MultibootGraphicsRuntime_VbeMode"), DestinationIsIndirect = true, SourceReg = Registers.EAX };
-#endif
+            new Mov { DestinationReg = XSRegisters.EBX, SourceRef = ElementReference.New("MultiBootInfo_Structure"), SourceIsIndirect = true };
+            new Mov { DestinationReg = XSRegisters.EAX, SourceReg = XSRegisters.EBX, SourceIsIndirect = true, SourceDisplacement = 72 };
+            new Mov { DestinationRef = ElementReference.New("MultibootGraphicsRuntime_VbeControlInfoAddr"), DestinationIsIndirect = true, SourceReg = XSRegisters.EAX };
+            new Mov { DestinationReg = XSRegisters.EAX, SourceReg = XSRegisters.EBX, SourceIsIndirect = true, SourceDisplacement = 76 };
+            new Mov { DestinationRef = ElementReference.New("MultibootGraphicsRuntime_VbeModeInfoAddr"), DestinationIsIndirect = true, SourceReg = XSRegisters.EAX };
+            new Mov { DestinationReg = XSRegisters.EAX, SourceReg = XSRegisters.EBX, SourceIsIndirect = true, SourceDisplacement = 80 };
+            new Mov { DestinationRef = ElementReference.New("MultibootGraphicsRuntime_VbeMode"), DestinationIsIndirect = true, SourceReg = XSRegisters.EAX };
 
             //WriteDebugVideo("Initializing SSE.");
             //new Comment(this, "BEGIN - SSE Init");
@@ -377,17 +388,31 @@ namespace Cosmos.IL2CPU
             {
                 var xGen = new AsmGenerator();
 
-                void GenerateAssembler(Assembler assembler)
-                {
-                    CurrentInstance.Instructions.AddRange(assembler.Instructions);
-                    CurrentInstance.DataMembers.AddRange(assembler.DataMembers);
-                }
-
+                var xGenerateAssembler =
+                    new Action<object>(i =>
+                    {
+                        if (i is StreamReader)
+                        {
+                            var xAsm = xGen.Generate((StreamReader)i);
+                            CurrentInstance.Instructions.AddRange(xAsm.Instructions);
+                            CurrentInstance.DataMembers.AddRange(xAsm.DataMembers);
+                        }
+                        else if (i is string)
+                        {
+                            var xAsm = xGen.Generate((string)i);
+                            CurrentInstance.Instructions.AddRange(xAsm.Instructions);
+                            CurrentInstance.DataMembers.AddRange(xAsm.DataMembers);
+                        }
+                        else
+                        {
+                            throw new Exception("Object type '" + i.ToString() + "' not supported!");
+                        }
+                    });
                 if (ReadDebugStubFromDisk)
                 {
                     foreach (var xFile in Directory.GetFiles(CosmosPaths.DebugStubSrc, "*.xs"))
                     {
-                        GenerateAssembler(xGen.Generate(xFile));
+                        xGenerateAssembler(xFile);
                     }
                 }
                 else
@@ -402,7 +427,7 @@ namespace Cosmos.IL2CPU
                         {
                             using (var xReader = new StreamReader(xStream))
                             {
-                                GenerateAssembler(xGen.Generate(xReader));
+                                xGenerateAssembler(xReader);
                             }
                         }
                     }
@@ -449,9 +474,9 @@ namespace Cosmos.IL2CPU
             // emit helper functions:
             Action<byte, byte> xOutBytes = (port, value) =>
             {
-                XS.Set(DX, port);
-                XS.Set(EAX, value);
-                XS.WriteToPortDX(AL);
+                XS.Set(XSRegisters.DX, port);
+                XS.Set(XSRegisters.EAX, value);
+                XS.WriteToPortDX(XSRegisters.AL);
             };
 
             Action xIOWait = () => xOutBytes(0x80, 0x22);
@@ -486,7 +511,7 @@ namespace Cosmos.IL2CPU
 
         public const string EntryPointName = "__ENGINE_ENTRYPOINT__";
 
-        protected byte[] GdtDescriptor(uint aBase, uint aSize, bool aCode)
+        protected byte[] GdtDescriptor(UInt32 aBase, UInt32 aSize, bool aCode)
         {
             // Limit is a confusing word. Is it the max physical address or size?
             // In fact it is the size, and 286 docs actually refer to it as size
@@ -558,7 +583,7 @@ namespace Cosmos.IL2CPU
 
         protected override void OnBeforeFlush()
         {
-            DataMembers.AddRange(new DataMember[] { new DataMember("_end_data", Array.Empty<byte>()) });
+            DataMembers.AddRange(new DataMember[] { new DataMember("_end_data", new byte[0]) });
         }
 
         protected override void OnFlushTextAfterEmitEverything(TextWriter aOutput)
